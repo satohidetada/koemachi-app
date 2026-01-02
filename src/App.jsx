@@ -26,7 +26,6 @@ export default function App() {
   const [inputText, setInputText] = useState('');
   const [isMatching, setIsMatching] = useState(false);
   
-  // 新機能用ステート
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(0);
 
@@ -54,7 +53,6 @@ export default function App() {
     return () => audioContextRef.current?.close();
   }, []);
 
-  // 音量インジケーターの設定
   const setupLocalVolumeMeter = (stream) => {
     localStreamRef.current = stream;
     const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -74,7 +72,9 @@ export default function App() {
       let values = 0;
       for (let i = 0; i < bufferLength; i++) { values += dataArray[i]; }
       const average = values / bufferLength;
-      setVolume(average); // 0〜255程度の数値
+      // 声が入っていない時のノイズをカットし、最大値を100に調整
+      const level = Math.max(0, Math.min(100, (average - 10) * 2));
+      setVolume(level);
       requestAnimationFrame(updateVolume);
     };
     updateVolume();
@@ -118,7 +118,8 @@ export default function App() {
       }
     });
     const chatRoomId = [myId, call.peer].sort().join('_');
-    onChildAdded(ref(db, `chats/${chatRoomId}`), (data) => setChat(prev => [...prev, data.val()]));
+    const chatRef = ref(db, `chats/${chatRoomId}`);
+    onChildAdded(chatRef, (data) => setChat(prev => [...prev, data.val()]));
   };
 
   const sendChat = () => {
@@ -129,10 +130,9 @@ export default function App() {
 
   if (isMatching && screen !== 'call') {
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-blue-600 text-white p-6 text-center font-sans">
+      <div className="flex flex-col items-center justify-center h-screen bg-blue-600 text-white p-6 text-center">
         <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-white mb-6"></div>
         <h2 className="text-2xl font-bold mb-2">#{myProfile.tag} で探し中...</h2>
-        <p className="opacity-80">相手が見つかると自動で通話が始まります</p>
         <button onClick={() => window.location.reload()} className="mt-8 text-sm underline opacity-50">キャンセル</button>
       </div>
     );
@@ -144,8 +144,8 @@ export default function App() {
         <div className="p-8 pt-20 space-y-6">
           <h1 className="text-4xl font-black text-blue-600 text-center">コエマチ</h1>
           <div className="space-y-4 pt-6">
-            <input className="w-full border-2 border-slate-100 p-4 rounded-2xl outline-none focus:border-blue-500 transition" placeholder="ニックネーム" value={myProfile.name} onChange={e => setMyProfile({...myProfile, name: e.target.value})} />
-            <button className="w-full bg-blue-600 text-white p-5 rounded-2xl font-bold text-lg shadow-lg hover:bg-blue-700 transition" onClick={() => { if(!myProfile.name) return; localStorage.setItem('koemachi_user', JSON.stringify(myProfile)); setScreen('main'); }}>はじめる</button>
+            <input className="w-full border-2 border-slate-100 p-4 rounded-2xl outline-none" placeholder="ニックネーム" value={myProfile.name} onChange={e => setMyProfile({...myProfile, name: e.target.value})} />
+            <button className="w-full bg-blue-600 text-white p-5 rounded-2xl font-bold text-lg" onClick={() => { if(!myProfile.name) return; localStorage.setItem('koemachi_user', JSON.stringify(myProfile)); setScreen('main'); }}>はじめる</button>
           </div>
         </div>
       )}
@@ -167,14 +167,25 @@ export default function App() {
       {screen === 'call' && (
         <div className="h-screen bg-slate-900 text-white flex flex-col p-6 overflow-hidden">
           <div className="flex-1 text-center py-6">
-            <div className="w-24 h-24 bg-blue-500 rounded-full mx-auto mb-4 flex items-center justify-center text-3xl shadow-[0_0_20px_rgba(59,130,246,0.5)] transition-all" style={{ transform: `scale(${1 + volume / 500})` }}>👤</div>
+            <div className="w-20 h-20 bg-blue-500 rounded-full mx-auto mb-6 flex items-center justify-center text-3xl shadow-glow">👤</div>
             <h2 className="text-2xl font-bold">{opponent?.name}</h2>
             
-            {/* 音量インジケーター */}
-            <div className="mt-4 flex flex-col items-center">
-              <span className="text-[10px] text-slate-500 mb-1">YOUR VOICE</span>
-              <div className="w-32 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                <div className="h-full bg-blue-400 transition-all duration-75" style={{ width: `${Math.min(100, volume * 2)}%` }}></div>
+            {/* 改良版：パラメーター式インジケーター */}
+            <div className="mt-8 flex flex-col items-center">
+              <div className="flex justify-between w-48 mb-1 px-1">
+                <span className="text-[10px] text-slate-500 font-mono tracking-widest uppercase">Input Level</span>
+                <span className="text-[10px] text-blue-400 font-mono">{isMuted ? "MUTED" : `${Math.floor(volume)}%`}</span>
+              </div>
+              {/* 長方形の枠 */}
+              <div className="w-48 h-6 bg-slate-800 border border-slate-700 rounded-md p-1 flex items-center shadow-inner">
+                {/* 動くパラメーター */}
+                <div 
+                  className={`h-full transition-all duration-75 rounded-sm ${volume > 80 ? 'bg-red-500' : 'bg-blue-500'}`}
+                  style={{ width: `${isMuted ? 0 : volume}%`, boxShadow: volume > 0 ? '0 0 10px rgba(59, 130, 246, 0.5)' : 'none' }}
+                ></div>
+              </div>
+              <div className="mt-2 text-[8px] text-slate-600 font-mono flex gap-4">
+                <span>-INF</span><span>-40dB</span><span>-20dB</span><span>-6dB</span><span>0dB</span>
               </div>
             </div>
           </div>
@@ -185,17 +196,15 @@ export default function App() {
           
           <div className="flex gap-2 mb-6">
             <input className="flex-1 bg-slate-800 border border-slate-700 p-3 rounded-xl text-white outline-none focus:border-blue-500" placeholder="メッセージ..." value={inputText} onChange={e => setInputText(e.target.value)} />
-            <button className="bg-blue-600 p-3 rounded-xl hover:bg-blue-700 transition" onClick={sendChat}><Send size={18}/></button>
+            <button className="bg-blue-600 p-3 rounded-xl hover:bg-blue-700" onClick={sendChat}><Send size={18}/></button>
           </div>
 
           <div className="flex justify-evenly items-center mb-6">
-            {/* ミュートボタン */}
-            <button onClick={toggleMute} className={`w-14 h-14 rounded-full flex items-center justify-center transition ${isMuted ? 'bg-orange-500' : 'bg-slate-700'}`}>
+            <button onClick={toggleMute} className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${isMuted ? 'bg-red-600 ring-4 ring-red-900/50' : 'bg-slate-700'}`}>
               {isMuted ? <MicOff size={24}/> : <Mic size={24}/>}
             </button>
-            {/* 切断ボタン */}
-            <button className="bg-red-500 w-20 h-20 rounded-full flex items-center justify-center shadow-2xl hover:bg-red-600 transition" onClick={() => window.location.reload()}><PhoneOff size={32}/></button>
-            <button onClick={() => alert('通報しました')} className="w-14 h-14 rounded-full bg-slate-800 flex items-center justify-center text-slate-500"><ShieldAlert size={24}/></button>
+            <button className="bg-red-500 w-20 h-20 rounded-full flex items-center justify-center shadow-2xl active:scale-95 transition-all" onClick={() => window.location.reload()}><PhoneOff size={32}/></button>
+            <button onClick={() => alert('通報しました')} className="w-14 h-14 rounded-full bg-slate-800 flex items-center justify-center text-slate-500 active:bg-slate-700"><ShieldAlert size={24}/></button>
           </div>
           <audio ref={remoteAudioRef} autoPlay />
         </div>
