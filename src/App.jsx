@@ -4,6 +4,7 @@ import { getDatabase, ref, set, onValue, push, remove, onChildAdded, limitToFirs
 import { Peer } from "peerjs";
 import { Phone, PhoneOff, User, MessageCircle, Send, ShieldAlert } from 'lucide-react';
 
+// Firebase設定
 const firebaseConfig = {
   apiKey: "AIzaSyCBkujRM_ub3EmRSOvzU6d5ayBW40oh1Qk",
   authDomain: "koemachi-app.firebaseapp.com",
@@ -31,13 +32,30 @@ export default function App() {
   const currentCallRef = useRef(null);
 
   useEffect(() => {
-    const p = new Peer();
-    p.on('open', id => setMyId(id));
-    p.on('call', async (call) => {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => alert("マイクを許可してください"));
-      call.answer(stream); console.log("Answered with stream");
-      handleStream(call, call.metadata);
+    // テザリング・モバイル回線向けの接続設定（STUNサーバー）
+    const p = new Peer({
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' }
+        ]
+      }
     });
+
+    p.on('open', id => setMyId(id));
+
+    // 着信時の処理
+    p.on('call', async (call) => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        call.answer(stream);
+        handleStream(call, call.metadata);
+      } catch (err) {
+        alert("マイクの使用を許可してください。");
+      }
+    });
+
     peerRef.current = p;
     const saved = localStorage.getItem('koemachi_user');
     if (saved) { setMyProfile(JSON.parse(saved)); setScreen('main'); }
@@ -74,7 +92,7 @@ export default function App() {
       const myWaitingStatusRef = ref(db, `waiting/${tag}/${myId}`);
       onValue(myWaitingStatusRef, (snap) => {
           if (!snap.exists() && isMatching) {
-              // 相手に消された＝着信を待つ状態
+              // 相手にマッチングされたことを検知
           }
       });
     }
@@ -87,7 +105,11 @@ export default function App() {
     setScreen('call');
     
     call.on('stream', stream => {
-      if (remoteAudioRef.current) remoteAudioRef.current.srcObject = stream; remoteAudioRef.current.play().catch(e => console.log(e));
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.srcObject = stream;
+        // 自動再生制限対策
+        remoteAudioRef.current.play().catch(e => console.log("Play failed:", e));
+      }
     });
 
     const chatRoomId = [myId, call.peer].sort().join('_');
@@ -104,13 +126,14 @@ export default function App() {
     setInputText('');
   };
 
+  // マッチング中の画面
   if (isMatching && screen !== 'call') {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-blue-600 text-white p-6 text-center">
         <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-white mb-6"></div>
         <h2 className="text-2xl font-bold mb-2">#{myProfile.tag} で探し中...</h2>
-        <p className="opacity-80">相手が見つかると自動で通話が始まります</p>
-        <p className="text-[10px] mt-4 opacity-50">ID: {myId}</p>
+        <p className="opacity-80 text-sm">相手が見つかると自動で通話が始まります</p>
+        <p className="text-[10px] mt-4 opacity-50 font-mono">My ID: {myId}</p>
         <button onClick={() => window.location.reload()} className="mt-8 text-sm underline opacity-50">キャンセル</button>
       </div>
     );
@@ -141,7 +164,6 @@ export default function App() {
             <h2 className="text-2xl font-bold italic text-blue-600">KoeMachi</h2>
             <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200 transition"><User size={20}/></button>
           </header>
-          <p className="text-center text-slate-500 mb-6 font-medium">今の気分を選択してマッチング</p>
           <div className="grid grid-cols-2 gap-4">
             {['雑談', '悩み相談', '恋バナ', '寝落ち'].map(tag => (
               <button key={tag} className="bg-white border-2 border-blue-50 p-8 rounded-3xl hover:border-blue-400 hover:bg-blue-50 transition shadow-sm text-center font-bold text-lg text-slate-700" onClick={() => startMatch(tag)}>#{tag}</button>
@@ -155,7 +177,7 @@ export default function App() {
           <div className="flex-1 text-center py-10">
             <div className="w-24 h-24 bg-blue-500 rounded-full mx-auto mb-4 flex items-center justify-center text-3xl shadow-[0_0_20px_rgba(59,130,246,0.5)]">👤</div>
             <h2 className="text-2xl font-bold">{opponent?.name}</h2>
-            <p className="text-slate-400">{opponent?.gender} / {opponent?.age}</p>
+            <p className="text-slate-400">{opponent?.gender}</p>
             <p className="mt-4 text-sm px-6 italic text-slate-300 line-clamp-2">"{opponent?.bio}"</p>
           </div>
           <div className="h-48 overflow-y-auto bg-slate-800/50 rounded-2xl p-4 mb-4 space-y-2 border border-slate-700 backdrop-blur-sm">
@@ -163,11 +185,11 @@ export default function App() {
           </div>
           <div className="flex gap-2 mb-8">
             <input className="flex-1 bg-slate-800 border border-slate-700 p-4 rounded-2xl text-white outline-none focus:border-blue-500" placeholder="メッセージ..." value={inputText} onChange={e => setInputText(e.target.value)} />
-            <button className="bg-blue-600 p-4 rounded-2xl hover:bg-blue-700 transition shadow-lg" onClick={sendChat}><Send size={20}/></button>
+            <button className="bg-blue-600 p-4 rounded-2xl hover:bg-blue-700 transition" onClick={sendChat}><Send size={20}/></button>
           </div>
           <div className="flex justify-between items-center px-4 mb-4">
             <button onClick={() => alert('通報しました')} className="text-slate-500 flex items-center gap-1 text-xs hover:text-red-400 transition"><ShieldAlert size={14}/>通報</button>
-            <button className="bg-red-500 w-20 h-20 rounded-full flex items-center justify-center shadow-2xl hover:bg-red-600 transition animate-pulse-slow" onClick={() => window.location.reload()}><PhoneOff size={32}/></button>
+            <button className="bg-red-500 w-20 h-20 rounded-full flex items-center justify-center shadow-2xl hover:bg-red-600 transition" onClick={() => window.location.reload()}><PhoneOff size={32}/></button>
             <div className="w-10"></div>
           </div>
           <audio ref={remoteAudioRef} autoPlay />
