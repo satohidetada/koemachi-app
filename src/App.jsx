@@ -35,13 +35,25 @@ export default function App() {
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
 
-  useEffect(() => {
+useEffect(() => {
+    // 接続先サーバー（STUN）を複数指定して、テザリングの壁を突破しやすくします
     const p = new Peer({
-      config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] }
+      config: {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun2.l.google.com:19302' },
+          { urls: 'stun:stun3.l.google.com:19302' },
+          { urls: 'stun:stun4.l.google.com:19302' }
+        ],
+        iceCandidatePoolSize: 10
+      }
     });
+
     p.on('open', id => setMyId(id));
     p.on('call', async (call) => {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => alert("マイクを許可してください"));
+      // 受信時も確実にマイクを掴む
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(e => console.error(e));
       setupLocalVolumeMeter(stream);
       call.answer(stream);
       handleStream(call, call.metadata);
