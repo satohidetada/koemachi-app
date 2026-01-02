@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, onValue, push, remove, onChildAdded, limitToFirst, query, get } from "firebase/database";
 import { Peer } from "peerjs";
-import { Phone, PhoneOff, User, Send, ShieldAlert, Mic, MicOff } from 'lucide-react';
+import { Phone, PhoneOff, User, Send, ShieldAlert, Mic, MicOff, Heart, Coffee, Moon, MessageSquare } from 'lucide-react';
 
+// Firebase設定
 const firebaseConfig = {
   apiKey: "AIzaSyCBkujRM_ub3EmRSOvzU6d5ayBW40oh1Qk",
   authDomain: "koemachi-app.firebaseapp.com",
@@ -35,8 +36,8 @@ export default function App() {
   const audioContextRef = useRef(null);
   const analyserRef = useRef(null);
 
-useEffect(() => {
-    // 接続先サーバー（STUN）を複数指定して、テザリングの壁を突破しやすくします
+  useEffect(() => {
+    // 既存のテザリング対策設定をすべて維持
     const p = new Peer({
       config: {
         iceServers: [
@@ -51,13 +52,14 @@ useEffect(() => {
     });
 
     p.on('open', id => setMyId(id));
+
     p.on('call', async (call) => {
-      // 受信時も確実にマイクを掴む
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(e => console.error(e));
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => alert("マイクを許可してね"));
       setupLocalVolumeMeter(stream);
       call.answer(stream);
       handleStream(call, call.metadata);
     });
+
     peerRef.current = p;
     const saved = localStorage.getItem('koemachi_user');
     if (saved) { setMyProfile(JSON.parse(saved)); setScreen('main'); }
@@ -122,10 +124,9 @@ useEffect(() => {
       handleStream(call, opponentData);
     } else {
       await set(ref(db, `waiting/${tag}/${myId}`), { ...myProfile, peerId: myId });
-      // 相手に消された＝マッチング成功を監視
       onValue(ref(db, `waiting/${tag}/${myId}`), (snap) => {
           if (!snap.exists() && isMatching) {
-              // 着信(on call)を待つ
+              // マッチング成功（着信を待つ）
           }
       });
     }
@@ -148,82 +149,110 @@ useEffect(() => {
 
   const sendChat = () => {
     if (!inputText || !currentCallRef.current) return;
-    push(ref(db, `chats/${[myId, currentCallRef.current.peer].sort().join('_')}`), { name: myProfile.name, text: inputText });
+    const chatRoomId = [myId, currentCallRef.current.peer].sort().join('_');
+    push(ref(db, `chats/${chatRoomId}`), { name: myProfile.name, text: inputText });
     setInputText('');
   };
 
+  // デザイン：マッチング中画面
   if (isMatching && screen !== 'call') {
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-blue-600 text-white p-6 text-center font-sans">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-white mb-6"></div>
-        <h2 className="text-2xl font-bold mb-2">#{myProfile.tag} で探し中...</h2>
-        <button onClick={() => window.location.reload()} className="mt-8 text-sm underline opacity-50">キャンセル</button>
+      <div className="flex flex-col items-center justify-center h-screen bg-gradient-to-br from-blue-400 to-pink-300 text-white p-6 text-center overflow-hidden">
+        <div className="relative mb-10">
+          <div className="absolute inset-0 bg-white/30 rounded-full animate-ping scale-150"></div>
+          <div className="relative bg-white p-8 rounded-full shadow-xl">
+             <Heart className="text-pink-500 animate-bounce" size={48} fill="currentColor" />
+          </div>
+        </div>
+        <h2 className="text-3xl font-black mb-2 drop-shadow-md">#{myProfile.tag}</h2>
+        <p className="font-medium opacity-90 animate-pulse">だれかを探しているよ...</p>
+        <button onClick={() => window.location.reload()} className="mt-12 px-8 py-3 bg-white/20 backdrop-blur-md rounded-full text-sm font-bold border border-white/30">キャンセル</button>
       </div>
     );
   }
 
   return (
-    <div className="max-w-md mx-auto min-h-screen bg-white font-sans text-slate-900 shadow-2xl relative">
+    <div className="max-w-md mx-auto min-h-screen bg-[#FDFCFE] font-sans text-slate-800 shadow-2xl overflow-x-hidden">
       {screen === 'profile' && (
-        <div className="p-8 pt-20 space-y-6">
-          <h1 className="text-4xl font-black text-blue-600 text-center">コエマチ</h1>
-          <div className="space-y-4 pt-6">
-            <input className="w-full border-2 border-slate-100 p-4 rounded-2xl outline-none focus:border-blue-500" placeholder="ニックネーム" value={myProfile.name} onChange={e => setMyProfile({...myProfile, name: e.target.value})} />
-            <button className="w-full bg-blue-600 text-white p-5 rounded-2xl font-bold text-lg" onClick={() => { if(!myProfile.name) return; localStorage.setItem('koemachi_user', JSON.stringify(myProfile)); setScreen('main'); }}>はじめる</button>
+        <div className="p-8 pt-20 flex flex-col items-center">
+          <div className="bg-gradient-to-tr from-blue-500 to-pink-400 p-4 rounded-[2.5rem] shadow-lg mb-6 rotate-3">
+            <MessageSquare size={40} className="text-white" fill="currentColor" />
+          </div>
+          <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-pink-500 mb-2">コエマチ</h1>
+          <p className="text-slate-400 text-sm mb-10 font-medium italic">"声"でつながる、あたらしいマチ</p>
+          <div className="w-full space-y-4">
+            <input className="w-full bg-white border-none shadow-[0_5px_15px_rgba(0,0,0,0.05)] p-5 rounded-[1.5rem] outline-none focus:ring-2 ring-pink-300 transition-all text-lg" placeholder="おなまえ" value={myProfile.name} onChange={e => setMyProfile({...myProfile, name: e.target.value})} />
+            <textarea className="w-full bg-white border-none shadow-[0_5px_15px_rgba(0,0,0,0.05)] p-5 rounded-[1.5rem] outline-none h-32 text-sm" placeholder="自己紹介文（趣味など）" value={myProfile.bio} onChange={e => setMyProfile({...myProfile, bio: e.target.value})} />
+            <button className="w-full bg-gradient-to-r from-blue-500 to-pink-400 text-white p-5 rounded-[1.5rem] font-black text-xl shadow-lg hover:scale-[1.02] active:scale-95 transition-all mt-4" onClick={() => { if(!myProfile.name) return; localStorage.setItem('koemachi_user', JSON.stringify(myProfile)); setScreen('main'); }}>はじめる！</button>
           </div>
         </div>
       )}
 
       {screen === 'main' && (
         <div className="p-6 pt-10">
-          <header className="flex justify-between items-center mb-10 text-blue-600">
-            <h2 className="text-2xl font-bold italic">KoeMachi</h2>
-            <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="p-2 bg-slate-100 rounded-full"><User size={20}/></button>
+          <header className="flex justify-between items-center mb-12">
+            <h2 className="text-2xl font-black bg-gradient-to-r from-blue-600 to-pink-500 bg-clip-text text-transparent">KoeMachi</h2>
+            <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="p-3 bg-white shadow-md rounded-2xl text-pink-400 hover:text-blue-500 transition-colors"><User size={24}/></button>
           </header>
-          <div className="grid grid-cols-2 gap-4">
-            {['雑談', '悩み相談', '恋バナ', '寝落ち'].map(tag => (
-              <button key={tag} className="bg-white border-2 border-blue-50 p-8 rounded-3xl hover:border-blue-400 transition shadow-sm text-center font-bold text-lg" onClick={() => startMatch(tag)}>#{tag}</button>
+          <p className="text-slate-500 font-bold mb-6 px-2">いまの気分は？</p>
+          <div className="grid grid-cols-2 gap-5">
+            {[
+              {tag: '雑談', color: 'from-blue-400 to-blue-500', icon: <Coffee />},
+              {tag: '悩み相談', color: 'from-purple-400 to-purple-500', icon: <ShieldAlert />},
+              {tag: '恋バナ', color: 'from-pink-400 to-pink-500', icon: <Heart />},
+              {tag: '寝落ち', color: 'from-indigo-500 to-indigo-700', icon: <Moon />}
+            ].map(item => (
+              <button key={item.tag} className={`bg-gradient-to-br ${item.color} p-6 rounded-[2rem] shadow-lg text-white font-black text-lg flex flex-col items-center gap-3 active:scale-90 transition-all`} onClick={() => startMatch(item.tag)}>
+                <span className="bg-white/20 p-2 rounded-full">{item.icon}</span>
+                #{item.tag}
+              </button>
             ))}
           </div>
         </div>
       )}
 
       {screen === 'call' && (
-        <div className="h-screen bg-slate-900 text-white flex flex-col p-6 overflow-hidden">
-          <div className="flex-1 text-center py-6">
-            <div className="w-20 h-20 bg-blue-500 rounded-full mx-auto mb-6 flex items-center justify-center text-3xl">👤</div>
-            <h2 className="text-2xl font-bold">{opponent?.name}</h2>
+        <div className="h-screen bg-[#1A1C2E] text-white flex flex-col p-6 overflow-hidden relative">
+          <div className="absolute top-[-10%] left-[-10%] w-64 h-64 bg-pink-500/20 blur-[100px] rounded-full"></div>
+          <div className="absolute bottom-[-10%] right-[-10%] w-64 h-64 bg-blue-500/20 blur-[100px] rounded-full"></div>
+
+          <div className="flex-1 text-center py-10 z-10">
+            <div className="w-28 h-28 bg-gradient-to-tr from-pink-500 to-blue-500 rounded-[2.5rem] mx-auto mb-6 flex items-center justify-center text-4xl shadow-[0_0_30px_rgba(236,72,153,0.3)] border-2 border-white/20">👤</div>
+            <h2 className="text-3xl font-black mb-2 tracking-tight">{opponent?.name}</h2>
+            <p className="text-white/40 text-xs italic mb-8 line-clamp-1 px-10">"{opponent?.bio}"</p>
             
-            {/* パラメーター式インジケーター */}
-            <div className="mt-8 flex flex-col items-center">
-              <div className="flex justify-between w-48 mb-1 px-1">
-                <span className="text-[10px] text-slate-500 font-mono uppercase">Level Meter</span>
+            {/* パラメーター式インジケーター（全機能を維持） */}
+            <div className="mt-4 bg-white/5 backdrop-blur-xl p-5 rounded-[2rem] border border-white/10 max-w-[220px] mx-auto">
+              <div className="flex justify-between mb-2 px-1">
+                <span className="text-[10px] text-white/40 font-black tracking-widest uppercase">Level Meter</span>
                 <span className="text-[10px] text-blue-400 font-mono">{isMuted ? "MUTED" : `${Math.floor(volume)}%`}</span>
               </div>
-              <div className="w-48 h-6 bg-slate-800 border border-slate-700 rounded-md p-1 flex items-center overflow-hidden">
+              <div className="w-full h-7 bg-black/40 rounded-xl p-1.5 flex items-center overflow-hidden border border-white/5">
                 <div 
-                  className={`h-full transition-all duration-75 rounded-sm ${volume > 80 ? 'bg-red-500' : 'bg-blue-500'}`}
+                  className={`h-full transition-all duration-75 rounded-lg shadow-[0_0_15px_rgba(59,130,246,0.8)] ${volume > 80 ? 'bg-pink-500 shadow-pink-500/50' : 'bg-blue-400'}`}
                   style={{ width: `${isMuted ? 0 : volume}%` }}
                 ></div>
               </div>
             </div>
           </div>
 
-          <div className="h-40 overflow-y-auto bg-slate-800/50 rounded-2xl p-4 mb-4 text-sm border border-slate-700">
-            {chat.map((msg, i) => <div key={i} className="mb-1"><span className="text-blue-400 font-bold">{msg.name}:</span> {msg.text}</div>)}
+          {/* チャット機能（維持） */}
+          <div className="h-40 overflow-y-auto bg-black/30 backdrop-blur-md rounded-[1.5rem] p-4 mb-4 text-sm border border-white/5 z-10">
+            {chat.map((m, i) => <div key={i} className="mb-2"><span className="text-pink-300 font-black mr-2">{m.name}:</span><span className="opacity-90">{m.text}</span></div>)}
           </div>
           
-          <div className="flex gap-2 mb-6">
-            <input className="flex-1 bg-slate-800 border border-slate-700 p-3 rounded-xl text-white outline-none" placeholder="メッセージ..." value={inputText} onChange={e => setInputText(e.target.value)} />
-            <button className="bg-blue-600 p-3 rounded-xl" onClick={sendChat}><Send size={18}/></button>
+          <div className="flex gap-3 mb-8 z-10">
+            <input className="flex-1 bg-white/10 border border-white/10 p-4 rounded-2xl text-white outline-none focus:bg-white/20 transition-all placeholder:text-white/20" value={inputText} onChange={e => setInputText(e.target.value)} placeholder="メッセージ..." />
+            <button className="bg-pink-500 p-4 rounded-2xl shadow-lg shadow-pink-500/20 active:scale-90 transition-all" onClick={sendChat}><Send size={20}/></button>
           </div>
 
-          <div className="flex justify-evenly items-center mb-6">
-            <button onClick={toggleMute} className={`w-14 h-14 rounded-full flex items-center justify-center transition-all ${isMuted ? 'bg-red-600' : 'bg-slate-700'}`}>
-              {isMuted ? <MicOff size={24}/> : <Mic size={24}/>}
+          {/* 通話操作（ミュート・切断・通報機能を維持） */}
+          <div className="flex justify-between items-center px-4 mb-6 z-10">
+            <button onClick={toggleMute} className={`w-16 h-16 rounded-[1.5rem] flex items-center justify-center transition-all ${isMuted ? 'bg-red-500 shadow-red-500/40' : 'bg-white/10 hover:bg-white/20'} shadow-lg`}>
+              {isMuted ? <MicOff size={28}/> : <Mic size={28}/>}
             </button>
-            <button className="bg-red-500 w-20 h-20 rounded-full flex items-center justify-center shadow-2xl" onClick={() => window.location.reload()}><PhoneOff size={32}/></button>
-            <button onClick={() => alert('通報しました')} className="w-14 h-14 rounded-full bg-slate-800 flex items-center justify-center text-slate-500"><ShieldAlert size={24}/></button>
+            <button className="bg-gradient-to-br from-pink-500 to-red-600 w-24 h-24 rounded-[2.5rem] flex items-center justify-center shadow-[0_15px_30px_rgba(236,72,153,0.4)] active:scale-90 transition-all" onClick={() => window.location.reload()}><PhoneOff size={40}/></button>
+            <button onClick={() => alert('通報しました')} className="w-16 h-16 rounded-[1.5rem] bg-white/5 flex items-center justify-center text-white/20 active:text-red-400 transition-colors"><ShieldAlert size={28}/></button>
           </div>
           <audio ref={remoteAudioRef} autoPlay />
         </div>
