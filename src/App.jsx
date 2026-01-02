@@ -35,7 +35,7 @@ export default function App() {
     p.on('open', id => setMyId(id));
     p.on('call', async (call) => {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => alert("マイクを許可してください"));
-      call.answer(stream);
+      call.answer(stream); console.log("Answered with stream");
       handleStream(call, call.metadata);
     });
     peerRef.current = p;
@@ -87,7 +87,7 @@ export default function App() {
     setScreen('call');
     
     call.on('stream', stream => {
-      if (remoteAudioRef.current) remoteAudioRef.current.srcObject = stream;
+      if (remoteAudioRef.current) remoteAudioRef.current.srcObject = stream; remoteAudioRef.current.play().catch(e => console.log(e));
     });
 
     const chatRoomId = [myId, call.peer].sort().join('_');
