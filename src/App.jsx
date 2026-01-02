@@ -2,13 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, set, onValue, push, remove, onChildAdded, limitToFirst, query, get } from "firebase/database";
 import { Peer } from "peerjs";
-import { Phone, PhoneOff, User, Send, ShieldAlert } from 'lucide-react';
+import { Phone, PhoneOff, User, MessageCircle, Send, ShieldAlert } from 'lucide-react';
 
 const firebaseConfig = {
   apiKey: "AIzaSyCBkujRM_ub3EmRSOvzU6d5ayBW40oh1Qk",
   authDomain: "koemachi-app.firebaseapp.com",
   projectId: "koemachi-app",
-  databaseURL: "https://koemachi-app-default-rtdb.europe-west1.firebasedatabase.app/",
+  databaseURL: "https://koemachi-app-default-rtdb.europe-west1.firebasedatabase.app",
   storageBucket: "koemachi-app.firebasestorage.app",
   messagingSenderId: "811633818338",
   appId: "1:811633818338:web:991519d6cab6212a31fcbb"
@@ -34,7 +34,7 @@ export default function App() {
     const p = new Peer();
     p.on('open', id => setMyId(id));
     p.on('call', async (call) => {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => alert("マイクを許可してください"));
       call.answer(stream);
       handleStream(call, call.metadata);
     });
@@ -66,14 +66,15 @@ export default function App() {
 
       await remove(ref(db, `waiting/${tag}/${opponentId}`));
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const call = peerRef.current.call(opponentId, stream, { metadata: myProfile });
+      const call = peerRef.current.call(opponentId, stream, { metadata: { ...myProfile, peerId: myId } });
       handleStream(call, opponentData);
     } else {
       await set(ref(db, `waiting/${tag}/${myId}`), { ...myProfile, peerId: myId });
+      
       const myWaitingStatusRef = ref(db, `waiting/${tag}/${myId}`);
       onValue(myWaitingStatusRef, (snap) => {
           if (!snap.exists() && isMatching) {
-              console.log("Matched!");
+              // 相手に消された＝着信を待つ状態
           }
       });
     }
@@ -109,13 +110,14 @@ export default function App() {
         <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-white mb-6"></div>
         <h2 className="text-2xl font-bold mb-2">#{myProfile.tag} で探し中...</h2>
         <p className="opacity-80">相手が見つかると自動で通話が始まります</p>
+        <p className="text-[10px] mt-4 opacity-50">ID: {myId}</p>
         <button onClick={() => window.location.reload()} className="mt-8 text-sm underline opacity-50">キャンセル</button>
       </div>
     );
   }
 
   return (
-    <div className="max-w-md mx-auto min-h-screen bg-white font-sans text-slate-900 shadow-2xl">
+    <div className="max-w-md mx-auto min-h-screen bg-white font-sans text-slate-900 shadow-2xl relative">
       {screen === 'profile' && (
         <div className="p-8 pt-20 space-y-6">
           <div className="text-center">
@@ -123,11 +125,11 @@ export default function App() {
             <p className="text-slate-400 mt-2 text-sm">ひまつぶし通話アプリ</p>
           </div>
           <div className="space-y-4 pt-6">
-            <input className="w-full border-2 border-slate-100 p-4 rounded-2xl outline-none" placeholder="ニックネーム" value={myProfile.name} onChange={e => setMyProfile({...myProfile, name: e.target.value})} />
-            <select className="w-full border-2 border-slate-100 p-4 rounded-2xl" value={myProfile.gender} onChange={e => setMyProfile({...myProfile, gender: e.target.value})}>
+            <input className="w-full border-2 border-slate-100 p-4 rounded-2xl outline-none focus:border-blue-500 transition" placeholder="ニックネーム" value={myProfile.name} onChange={e => setMyProfile({...myProfile, name: e.target.value})} />
+            <select className="w-full border-2 border-slate-100 p-4 rounded-2xl outline-none" value={myProfile.gender} onChange={e => setMyProfile({...myProfile, gender: e.target.value})}>
               <option>未設定</option><option>男性</option><option>女性</option><option>その他</option>
             </select>
-            <textarea className="w-full border-2 border-slate-100 p-4 rounded-2xl h-32 outline-none" placeholder="自己紹介文（趣味など）" value={myProfile.bio} onChange={e => setMyProfile({...myProfile, bio: e.target.value})} />
+            <textarea className="w-full border-2 border-slate-100 p-4 rounded-2xl h-32 outline-none focus:border-blue-500 transition" placeholder="自己紹介文（趣味など）" value={myProfile.bio} onChange={e => setMyProfile({...myProfile, bio: e.target.value})} />
             <button className="w-full bg-blue-600 text-white p-5 rounded-2xl font-bold text-lg shadow-lg hover:bg-blue-700 transition" onClick={saveProfile}>はじめる</button>
           </div>
         </div>
@@ -137,33 +139,36 @@ export default function App() {
         <div className="p-6">
           <header className="flex justify-between items-center mb-10">
             <h2 className="text-2xl font-bold italic text-blue-600">KoeMachi</h2>
-            <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="text-xs text-slate-400">ログアウト</button>
+            <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200 transition"><User size={20}/></button>
           </header>
+          <p className="text-center text-slate-500 mb-6 font-medium">今の気分を選択してマッチング</p>
           <div className="grid grid-cols-2 gap-4">
             {['雑談', '悩み相談', '恋バナ', '寝落ち'].map(tag => (
-              <button key={tag} className="bg-white border-2 border-blue-50 p-8 rounded-3xl hover:border-blue-400 hover:bg-blue-100 transition shadow-sm text-center font-bold text-lg" onClick={() => startMatch(tag)}>#{tag}</button>
+              <button key={tag} className="bg-white border-2 border-blue-50 p-8 rounded-3xl hover:border-blue-400 hover:bg-blue-50 transition shadow-sm text-center font-bold text-lg text-slate-700" onClick={() => startMatch(tag)}>#{tag}</button>
             ))}
           </div>
         </div>
       )}
 
       {screen === 'call' && (
-        <div className="h-screen bg-slate-900 text-white flex flex-col p-6">
+        <div className="h-screen bg-slate-900 text-white flex flex-col p-6 overflow-hidden">
           <div className="flex-1 text-center py-10">
-            <div className="w-24 h-24 bg-blue-500 rounded-full mx-auto mb-4 flex items-center justify-center text-3xl shadow-glow">👤</div>
+            <div className="w-24 h-24 bg-blue-500 rounded-full mx-auto mb-4 flex items-center justify-center text-3xl shadow-[0_0_20px_rgba(59,130,246,0.5)]">👤</div>
             <h2 className="text-2xl font-bold">{opponent?.name}</h2>
             <p className="text-slate-400">{opponent?.gender} / {opponent?.age}</p>
-            <p className="mt-4 text-sm px-6 italic text-slate-300">"{opponent?.bio}"</p>
+            <p className="mt-4 text-sm px-6 italic text-slate-300 line-clamp-2">"{opponent?.bio}"</p>
           </div>
-          <div className="h-48 overflow-y-auto bg-slate-800/50 rounded-2xl p-4 mb-4 space-y-2 border border-slate-700">
-            {chat.map((msg, i) => <div key={i} className="text-sm border-b border-slate-700/50 pb-1"><span className="text-blue-400 font-bold">{msg.name}:</span> {msg.text}</div>)}
+          <div className="h-48 overflow-y-auto bg-slate-800/50 rounded-2xl p-4 mb-4 space-y-2 border border-slate-700 backdrop-blur-sm">
+            {chat.map((msg, i) => <div key={i} className="text-sm border-b border-slate-700/30 pb-1 last:border-0"><span className="text-blue-400 font-bold">{msg.name}:</span> {msg.text}</div>)}
           </div>
           <div className="flex gap-2 mb-8">
-            <input className="flex-1 bg-slate-800 border border-slate-700 p-4 rounded-2xl text-white outline-none" placeholder="メッセージ..." value={inputText} onChange={e => setInputText(e.target.value)} />
-            <button className="bg-blue-600 p-4 rounded-2xl" onClick={sendChat}><Send size={20}/></button>
+            <input className="flex-1 bg-slate-800 border border-slate-700 p-4 rounded-2xl text-white outline-none focus:border-blue-500" placeholder="メッセージ..." value={inputText} onChange={e => setInputText(e.target.value)} />
+            <button className="bg-blue-600 p-4 rounded-2xl hover:bg-blue-700 transition shadow-lg" onClick={sendChat}><Send size={20}/></button>
           </div>
-          <div className="flex justify-center mb-4">
-            <button className="bg-red-500 w-20 h-20 rounded-full flex items-center justify-center shadow-2xl hover:bg-red-600 transition" onClick={() => window.location.reload()}><PhoneOff size={32}/></button>
+          <div className="flex justify-between items-center px-4 mb-4">
+            <button onClick={() => alert('通報しました')} className="text-slate-500 flex items-center gap-1 text-xs hover:text-red-400 transition"><ShieldAlert size={14}/>通報</button>
+            <button className="bg-red-500 w-20 h-20 rounded-full flex items-center justify-center shadow-2xl hover:bg-red-600 transition animate-pulse-slow" onClick={() => window.location.reload()}><PhoneOff size={32}/></button>
+            <div className="w-10"></div>
           </div>
           <audio ref={remoteAudioRef} autoPlay />
         </div>
