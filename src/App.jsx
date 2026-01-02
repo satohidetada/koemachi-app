@@ -8,7 +8,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyCBkujRM_ub3EmRSOvzU6d5ayBW40oh1Qk",
   authDomain: "koemachi-app.firebaseapp.com",
   projectId: "koemachi-app",
-  databaseURL: "https://koemachi-app-default-rtdb.firebaseio.com",
+  databaseURL: "https://koemachi-app-default-rtdb.europe-west1.firebasedatabase.app/",
   storageBucket: "koemachi-app.firebasestorage.app",
   messagingSenderId: "811633818338",
   appId: "1:811633818338:web:991519d6cab6212a31fcbb"
